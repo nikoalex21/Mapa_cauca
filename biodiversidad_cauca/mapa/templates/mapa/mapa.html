@@ -1,0 +1,348 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de Biodiversidad del Cauca</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <script id="ubicaciones-data" type="application/json">{{ ubicaciones|safe }}</script>
+    <script id="habitats-data" type="application/json">{{ habitats|safe }}</script>
+    <script id="amenazas-data" type="application/json">{{ amenazas|safe }}</script>
+    <script id="conservaciones-data" type="application/json">{{ conservaciones|safe }}</script>
+
+    <style>
+        #map { height: 500px; }
+        #mapHostal { height: 300px; }
+    </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <a class="navbar-brand" href="#">Biodiversidad del Cauca</a>
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav mr-auto">
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'mapa' %}">Mapa</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'hostales_map' %}">Hostales</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'mapa_interactivo' %}">Rutas de flora y fauna</a>
+        </li>
+      </ul>
+      <form class="form-inline my-2 my-lg-0">
+        <input class="form-control mr-sm-2" type="search" name="search" placeholder="Buscar especie" aria-label="Search">
+        <button class="btn btn-outline-success my-2 my-sm-0" type="submit">Buscar</button>
+    </form>      
+    </div>
+</nav>
+
+    <div id="map"></div>
+    
+    <button id="addMarkerBtn" class="btn btn-primary mt-3">Agregar Nueva Ubicación</button>
+    <button id="addHostalBtn" class="btn btn-success mt-3">Agregar Hostal</button>
+
+     <!-- Modal para ingresar el nombre y descripción de la ubicación -->
+     <div class="modal fade" id="markerModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="exampleModalLabel">Agrega el nombre de la ubicacion</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body">
+            <form id="markerForm" enctype="multipart/form-data">
+              <div class="form-group">
+                <label for="nombre">Nombre del lugar</label>
+                <input type="text" class="form-control" id="nombre" required>
+              </div>
+              <div class="form-group">
+                <label for="descripcion">Descripción</label>
+                <textarea class="form-control" id="descripcion" required></textarea>
+              </div>
+              <div class="form-group">
+                <label for="imagen">Imagen</label>
+                <input type="file" class="form-control-file" id="imagen">
+              </div>
+              <input type="hidden" id="latitud">
+              <input type="hidden" id="longitud">
+              <button type="submit" class="btn btn-primary">Guardar</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal para seleccionar la ubicación del hostal -->
+    <div class="modal fade" id="hostalModal" tabindex="-1" role="dialog" aria-labelledby="hostalModalLabel" aria-hidden="true">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="hostalModalLabel">Seleccionar Ubicación del Hostal</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div id="mapHostal" style="height: 300px;"></div>
+            <form id="hostalForm" enctype="multipart/form-data">
+              <div class="form-group">
+                <label for="nombreHostal">Nombre del hostal</label>
+                <input type="text" class="form-control" id="nombreHostal" required>
+              </div>
+              <div class="form-group">
+                <label for="descripcionHostal">Descripción</label>
+                <textarea class="form-control" id="descripcionHostal" required></textarea>
+              </div>
+              <div class="form-group">
+                <label for="precioHostal">Precio</label>
+                <input type="text" class="form-control" id="precioHostal" required>
+              </div>
+              <div class="form-group">
+                <label for="imagenHostal">Imagen</label>
+                <input type="file" class="form-control-file" id="imagenHostal">
+              </div>
+              <input type="hidden" id="latitudHostal">
+              <input type="hidden" id="longitudHostal">
+              <button type="submit" class="btn btn-primary">Guardar Hostal</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+
+
+
+
+<!-- Scripts -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+    // Configuración inicial del mapa
+    var map = L.map('map').setView([2.45, -76.6], 8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // Cargar capas existentes
+    const floraLayer = L.layerGroup().addTo(map);
+    const faunaLayer = L.layerGroup().addTo(map);
+
+    // Agregar rutas de flora
+    const floraRoutes = [
+        [[2.546, -76.429], [2.556, -76.415], [2.566, -76.450]],
+        [[2.543, -76.500], [2.560, -76.485], [2.580, -76.510]]
+    ];
+
+    floraRoutes.forEach(route => {
+        L.polyline(route, { color: 'green', weight: 5 }).addTo(floraLayer);
+    });
+
+    // Agregar rutas de fauna
+    const faunaRoutes = [
+        [[2.550, -76.460], [2.570, -76.450]],
+        [[2.552, -76.485], [2.568, -76.490]]
+    ];
+
+    faunaRoutes.forEach(route => {
+        L.polyline(route, { color: 'blue', weight: 5 }).addTo(faunaLayer);
+    });
+
+    // Controles de capas
+    const overlayLayers = {
+        "Rutas de Flora": floraLayer,
+        "Rutas de Fauna": faunaLayer
+    };
+
+    L.control.layers(null, overlayLayers).addTo(map);
+
+    // Función para agregar marcadores
+    function agregarMarcadores(data, tipo) {
+        data.forEach(function(item) {
+            var latlng = [item.fields.latitud, item.fields.longitud];
+            var popupContent = '<b>' + item.fields.nombre + '</b><br>' +
+                               item.fields.descripcion;
+
+            if (item.fields.imagen) {
+                var imageUrl = '{{ MEDIA_URL }}' + item.fields.imagen;
+                popupContent += '<br><img src="' + imageUrl + '" style="max-width: 500px; max-height: 200px;">';
+            }
+            L.marker(latlng).addTo(map).bindPopup(popupContent);
+        });
+    }
+
+    // Cargar datos desde el servidor
+    var ubicaciones = JSON.parse(document.getElementById('ubicaciones-data').textContent);
+    var habitats = JSON.parse(document.getElementById('habitats-data').textContent);
+    var amenazas = JSON.parse(document.getElementById('amenazas-data').textContent);
+    var conservaciones = JSON.parse(document.getElementById('conservaciones-data').textContent);
+
+    // Agregar marcadores al mapa
+    agregarMarcadores(ubicaciones, 'ubicaciones');
+    agregarMarcadores(habitats, 'habitats');
+    agregarMarcadores(amenazas, 'amenazas');
+    agregarMarcadores(conservaciones, 'conservaciones');
+
+    // Función para manejar la búsqueda
+    document.querySelector('form').addEventListener('submit', function(event) {
+        event.preventDefault();
+        var query = document.querySelector('input[name="search"]').value.toLowerCase();
+
+        // Filtrar datos basados en la búsqueda
+        var filteredUbicaciones = ubicaciones.filter(function(item) {
+            return item.fields.nombre.toLowerCase().includes(query);
+        });
+
+        // Limpiar el mapa y agregar marcadores filtrados
+        map.eachLayer(function(layer) {
+            if (layer instanceof L.Marker) {
+                map.removeLayer(layer);
+            }
+        });
+
+        agregarMarcadores(filteredUbicaciones, 'ubicaciones');
+    });
+
+    // Función para agregar una nueva ubicación
+    var addingMarker = false;
+
+    document.getElementById('addMarkerBtn').addEventListener('click', function() {
+        addingMarker = !addingMarker;
+        this.textContent = addingMarker ? 'Haz clic en el mapa para agregar un marcador' : 'Agregar Nueva Ubicación';
+    });
+
+    map.on('click', function(e) {
+        if (addingMarker) {
+            document.getElementById('latitud').value = e.latlng.lat;
+            document.getElementById('longitud').value = e.latlng.lng;
+            $('#markerModal').modal('show');
+        }
+    });
+
+    document.getElementById('markerForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        var nombre = document.getElementById('nombre').value;
+        var descripcion = document.getElementById('descripcion').value;
+        var latitud = document.getElementById('latitud').value;
+        var longitud = document.getElementById('longitud').value;
+        var imagen = document.getElementById('imagen').files[0];  
+
+        var formData = new FormData();
+        formData.append('nombre', nombre);
+        formData.append('descripcion', descripcion);
+        formData.append('latitud', latitud);
+        formData.append('longitud', longitud);
+        formData.append('imagen', imagen); 
+
+        fetch('{% url "guardar_ubicacion" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+            }
+        }).then(response => response.json())
+        .then(data => {
+            console.log(data);
+            L.marker([data.latitud, data.longitud]).addTo(map)
+              .bindPopup(data.nombre + '<br>' + data.descripcion + '<br><img src="' + data.imagen + '" width="100">');  
+            $('#markerModal').modal('hide');
+        });
+    });
+
+    // Configuración del mapa para la selección de hostales
+    var mapHostal = L.map('mapHostal').setView([2.45, -76.6], 8);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(mapHostal);
+
+    mapHostal.on('click', function(e) {
+        var latlng = e.latlng;
+        L.marker(latlng).addTo(mapHostal);
+        document.getElementById('latitudHostal').value = latlng.lat;
+        document.getElementById('longitudHostal').value = latlng.lng;
+    });
+
+    document.getElementById('addHostalBtn').addEventListener('click', function() {
+        $('#hostalModal').modal('show');
+        mapHostal.invalidateSize();
+    });
+
+    document.getElementById('hostalForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        var nombre = document.getElementById('nombreHostal').value;
+        var descripcion = document.getElementById('descripcionHostal').value;
+        var precio = document.getElementById('precioHostal').value;
+        var imagen = document.getElementById('imagenHostal').files[0];
+        var latitud = document.getElementById('latitudHostal').value;
+        var longitud = document.getElementById('longitudHostal').value;
+
+        var formData = new FormData();
+        formData.append('nombre', nombre);
+        formData.append('descripcion', descripcion);
+        formData.append('precio', precio);
+        formData.append('imagen', imagen);
+        formData.append('latitud', latitud);
+        formData.append('longitud', longitud);
+
+        fetch('{% url "guardar_hostal" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+            }
+        }).then(response => response.json())
+        .then(data => {
+            console.log('Hostal guardado:', data);
+            $('#hostalModal').modal('hide');
+        }).catch(error => {
+            console.error('Error al guardar el hostal:', error);
+        });
+    });
+
+    // Función para mostrar especies en el mapa (buscador)
+    function mostrarEspecies(query) {
+        fetch('{% url "buscar_especies" %}?query=' + query)
+            .then(response => response.json())
+            .then(data => {
+                map.eachLayer(function(layer) {
+                    if (layer instanceof L.Marker) {
+                        map.removeLayer(layer);
+                    }
+                });
+
+                data.forEach(function(especie) {
+                    var latlng = [especie.latitud, especie.longitud];
+                    var popupContent = '<b>' + especie.nombre + '</b>';
+
+                    L.marker(latlng).addTo(map).bindPopup(popupContent);
+                });
+            })
+            .catch(error => {
+                console.error('Error al buscar especies:', error);
+            });
+    }
+
+    document.querySelector('form').addEventListener('submit', function(event) {
+        event.preventDefault();
+        var query = document.querySelector('input[name="search"]').value;
+        mostrarEspecies(query);
+    });
+</script>
+
+    
+    
+
+   
